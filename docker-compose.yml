@@ -15,9 +15,8 @@ services:
     user: "3004:3004"
 
     ports:
-      # Bind to your TrueNAS LAN IP — replace with your actual IP.
-      # Never use 0.0.0.0 unless you have a firewall in front of this.
-      - "192.168.5.201:18789:18789"
+      # Bind to all interfaces — access control is handled by TrueNAS network/firewall.
+      - "18789:18789"
 
     env_file:
       - /mnt/files01/enc1/openclaw.env
