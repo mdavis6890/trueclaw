@@ -1,0 +1,80 @@
+# OpenClaw — TrueNAS Scale docker-compose
+# Place this file on your TrueNAS system (e.g. /mnt/pool/apps/openclaw/)
+# Secrets are loaded from /mnt/files01/enc1/openclaw.env (chmod 600, owned by root).
+#
+# Start:  docker compose up -d
+# Stop:   docker compose down
+# Logs:   docker compose logs -f openclaw
+
+services:
+  openclaw:
+    image: ghcr.io/openclaw/openclaw:latest
+    container_name: openclaw
+    restart: unless-stopped
+
+    user: "3004:3004"
+
+    ports:
+      # Bind to your TrueNAS LAN IP — replace with your actual IP.
+      # Never use 0.0.0.0 unless you have a firewall in front of this.
+      - "192.168.5.201:18789:18789"
+
+    env_file:
+      - /mnt/files01/enc1/openclaw.env
+
+    environment:
+      HOME: /home/node
+
+      # ── Security (non-secret, hardcoded) ──────────────────────────────────
+      # Require token auth on every request.
+      OPENCLAW_AUTH_MODE: token
+
+      # Disable agent shell / filesystem / browser tools unless you need them.
+      # Re-enable selectively in openclaw.json once you understand the risk.
+      OPENCLAW_TOOL_POLICY: deny-exec,deny-fs-write,deny-browser
+
+    volumes:
+      # Host paths should be ZFS datasets on your TrueNAS pool.
+      # Ensure correct ownership (run once on TrueNAS host):
+      #   chown -R 3004:3004 /mnt/files01/enc1/openclaw-config /mnt/files01/enc1/openclaw-workspace
+      #   chmod 700 /mnt/files01/enc1/openclaw-config
+      - ${OPENCLAW_CONFIG_PATH:-/mnt/files01/enc1/openclaw-config}:/home/node/.openclaw
+      - ${OPENCLAW_WORKSPACE_PATH:-/mnt/files01/enc1/openclaw-workspace}:/home/node/.openclaw/workspace
+
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:18789/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    # ── Resource limits (TrueNAS recommended minimums) ──────────────────────
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+        reservations:
+          memory: 512M
+
+    # ── Security hardening ──────────────────────────────────────────────────
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # Needed for outbound connections to messaging channels.
+      - NET_BIND_SERVICE
+    read_only: false   # config dir must be writable; tighten per-subpath if needed
+
+    # Do NOT mount the Docker socket unless you have explicitly reviewed the
+    # implications — it grants root-equivalent access to the TrueNAS host.
+    # Uncomment only if an extension explicitly requires it:
+    # volumes:
+    #   - /var/run/docker.sock:/var/run/docker.sock:ro
+
+networks:
+  default:
+    driver: bridge
+    # Isolate from other Docker networks on the host.
+    internal: false
